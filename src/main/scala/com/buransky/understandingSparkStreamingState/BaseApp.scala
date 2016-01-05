@@ -12,51 +12,73 @@ import org.slf4j.LoggerFactory
 trait BaseApp {
   def main(args: Array[String]): Unit
 
-  def withSsc(failOn: String)(action: (DStream[(String, String)]) => DStream[(String, String)]): Unit = {
+  def withKafkaAndSsc()(action: (DStream[(String, String)]) => DStream[(String, String)]): Unit = {
     withRunningKafka {
-      // Create Spark configuration
-      val conf = new SparkConf().setAppName(appName)
-        .setMaster("local[2]")
+      // Create topic otherwise creation will crash
+      publishStringMessageToKafka(kafkaTopic, "a")
+      publishStringMessageToKafka(kafkaTopic, "b")
+      publishStringMessageToKafka(kafkaTopic, "c")
+      publishStringMessageToKafka(kafkaTopic, "d")
 
-      val ssc = new StreamingContext(conf, Seconds(1))
-      ssc.checkpoint("./checkpoints")
+      withSsc()(action)
+    }
+  }
 
-      publishStringMessageToKafka(kafkaTopic, "")
+  def withSsc()(action: (DStream[(String, String)]) => DStream[(String, String)]): Unit = {
+    val ssc = StreamingContext.getOrCreate(checkpointDir, () => createSsc(action))
 
-      // Connect to embedded Kafka
-      val kafkaStream = createKafkaStream(ssc).map(m => m._2 -> m._2)
-
-      if (failOn.nonEmpty) {
-        publishStringMessageToKafka(kafkaTopic, "a")
-        publishStringMessageToKafka(kafkaTopic, "b")
-        publishStringMessageToKafka(kafkaTopic, "c")
-        publishStringMessageToKafka(kafkaTopic, "d")
-      }
-
-      // Invoke action and print it
-      action(kafkaStream).foreachRDD { rdd =>
-        rdd.foreach { case (k, v) =>
-          if (k == failOn)
-            Runtime.getRuntime.halt(-1)
-          log.debug(s"Message received. [$v]")
-        }
-      }
-
-      ssc.start()
-      if (failOn.isEmpty) {
+    ssc.start()
+    if (failOn.isEmpty) {
+      ssc.stop(stopSparkContext = true, stopGracefully = true)
+    }
+    else {
+      log.debug("Awaiting termination...")
+      try {
         ssc.awaitTermination()
-        ssc.stop(stopSparkContext = true, stopGracefully = true)
       }
-      else {
-        log.debug("Awaiting termination...")
-        ssc.awaitTermination()
+      finally {
+        ssc.stop()
       }
     }
   }
 
+  private def createSsc(action: (DStream[(String, String)]) => DStream[(String, String)]): StreamingContext = {
+    log.debug(s"Creating SSC. [$failOn, $murder]")
+
+    // Create Spark configuration
+    val conf = new SparkConf().setAppName(appName)
+      .setMaster("local[2]")
+
+    val ssc = new StreamingContext(conf, Seconds(1))
+    ssc.checkpoint("./checkpoints")
+
+    // Connect to embedded Kafka
+    val kafkaStream = createKafkaStream(ssc).map(m => m._2 -> m._2)
+
+    // Invoke action and print it
+    action(kafkaStream).foreachRDD { rdd =>
+      rdd.foreach { case (k, v) =>
+        if (k == failOn) {
+          if (murder)
+            Runtime.getRuntime.halt(-1)
+          else
+            throw new RuntimeException("Fail!")
+        }
+        log.debug(s"Message received. [$v]")
+      }
+    }
+
+    ssc
+  }
+
   private def createKafkaStream(ssc: StreamingContext): DStream[(String, String)] = {
     // Configure Kafka
-    val kafkaParams = Map[String, String]("metadata.broker.list" -> "localhost:6001")
+    val kafkaParams = Map[String, String](
+      "metadata.broker.list" -> "localhost:6001",
+      "auto.offset.reset" -> (if (failOn.isEmpty) "largest" else "smallest")
+    )
+
+    log.debug(s"Kafka params. [$kafkaParams]")
 
     // Create direct Kafka stream
     KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](ssc, kafkaParams, Set(kafkaTopic))
@@ -66,6 +88,10 @@ trait BaseApp {
 object BaseApp {
   val log = LoggerFactory.getLogger("com.buransky.App")
 
+  var failOn: String = ""
+  var murder: Boolean = false
+
+  val checkpointDir = "./checkpoints"
   val appName = "UnderstandingSparkStreamingState"
   val kafkaTopic = "test"
 

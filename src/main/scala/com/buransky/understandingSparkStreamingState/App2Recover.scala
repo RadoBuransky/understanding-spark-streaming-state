@@ -8,7 +8,8 @@ package com.buransky.understandingSparkStreamingState
   */
 object App2Recover extends BaseApp {
   override def main(args: Array[String]): Unit = {
-    withSsc(failOn = "") { inputStream =>
+    BaseApp.failOn = ""
+    withKafkaAndSsc() { inputStream =>
       inputStream.mapWithState(BaseApp.stringStateSpec)
     }
   }

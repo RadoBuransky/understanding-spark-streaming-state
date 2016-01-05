@@ -13,7 +13,9 @@ package com.buransky.understandingSparkStreamingState
   */
 object App1PublishAndFail extends BaseApp {
   override def main(args: Array[String]): Unit = {
-    withSsc(failOn = "c") { inputStream =>
+    BaseApp.failOn = "c"
+    BaseApp.murder = true
+    withKafkaAndSsc() { inputStream =>
       inputStream.mapWithState(BaseApp.stringStateSpec)
     }
   }
