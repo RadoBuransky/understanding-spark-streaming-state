@@ -1,19 +1,21 @@
 package com.buransky.understandingSparkStreamingState
 
-import scala.concurrent.Future
+import net.manub.embeddedkafka.EmbeddedKafka._
 
 /**
   * Application #2.
   *
-  * Run App1PublishAndFail before running this one. I would assume that this application uses checkpoint created by
-  * the App1PublishAndFail, but I am obviously wrong. I expected the "c" message to be redelivered, but nothing happens.
+  * To understand everything run it twice. First run with arguments "4 1" and second run twith "6 2".
   */
 object App2Recover extends BaseApp {
   override def main(args: Array[String]): Unit = {
     BaseApp.failOn = ""
-    BaseApp.lastMessage = "d"
-    withKafkaAndSsc() { inputStream =>
-      inputStream.mapWithState(BaseApp.stringStateSpec)
+    withRunningKafka {
+      publishMessagesToKafka(args(0).toInt, args(1).toInt, stopAfterLastMessage = true)
+
+      withSsc() { inputStream =>
+        inputStream.mapWithState(BaseApp.stringStateSpec)
+      }
     }
   }
 }

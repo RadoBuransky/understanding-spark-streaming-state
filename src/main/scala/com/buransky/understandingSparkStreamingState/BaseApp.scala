@@ -53,6 +53,17 @@ trait BaseApp {
     log.debug("SSC terminated.")
   }
 
+  protected def publishMessagesToKafka(count: Int, repeats: Int = 1, stopAfterLastMessage: Boolean = true): Unit = {
+    def msg(r: Int, c: Int) = s"$r:$c"
+    for (i <- 1 to repeats) {
+      for (j <- 1 to count) {
+        publishStringMessageToKafka(kafkaTopic, msg(i, j))
+      }
+    }
+    if (stopAfterLastMessage)
+      BaseApp.lastMessage = msg(repeats, count)
+  }
+
   private def createSsc(action: (DStream[(String, String)]) => DStream[(String, String)]): StreamingContext = {
     log.debug(s"Creating SSC. [$failOn, $murder]")
 
@@ -64,7 +75,10 @@ trait BaseApp {
     ssc.checkpoint("./checkpoints")
 
     // Connect to embedded Kafka
-    val kafkaStream = createKafkaStream(ssc).map(m => m._2 -> m._2)
+    val kafkaStream = createKafkaStream(ssc).map { m =>
+      val kv = m._2.split(":")
+      kv(1) -> m._2
+    }
 
     // Invoke action and print it
     action(kafkaStream).foreachRDD { rdd =>
