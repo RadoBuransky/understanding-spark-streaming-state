@@ -11,7 +11,8 @@ object App2Recover extends BaseApp {
   override def main(args: Array[String]): Unit = {
     BaseApp.failOn = ""
     withRunningKafka {
-      publishMessagesToKafka(args(0).toInt, args(1).toInt, stopAfterLastMessage = true)
+      val prefix = if (args.length < 3) "" else args(2)
+      publishMessagesToKafka(args(0).toInt, args(1).toInt, stopAfterLastMessage = true, prefix)
 
       withSsc() { inputStream =>
         inputStream.mapWithState(BaseApp.stringStateSpec)

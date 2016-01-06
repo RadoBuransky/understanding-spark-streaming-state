@@ -53,8 +53,11 @@ trait BaseApp {
     log.debug("SSC terminated.")
   }
 
-  protected def publishMessagesToKafka(count: Int, repeats: Int = 1, stopAfterLastMessage: Boolean = true): Unit = {
-    def msg(r: Int, c: Int) = s"$r:$c"
+  protected def publishMessagesToKafka(count: Int,
+                                       repeats: Int = 1,
+                                       stopAfterLastMessage: Boolean = true,
+                                       prefix: String = ""): Unit = {
+    def msg(r: Int, c: Int) = s"$prefix$r:$c"
     for (i <- 1 to repeats) {
       for (j <- 1 to count) {
         publishStringMessageToKafka(kafkaTopic, msg(i, j))
@@ -129,15 +132,15 @@ object BaseApp {
   val appName = "UnderstandingSparkStreamingState"
   val kafkaTopic = "test"
 
-  lazy val stringStateSpec = StateSpec.function[String, String, String, (String, String)](stateMapping("abc") _)
-  lazy val intStateSpec = StateSpec.function[String, String, Int, (String, String)](stateMapping(42) _)
+  lazy val stringStateSpec = StateSpec.function[String, String, String, (String, String)](stateMapping _)
 
-  private def stateMapping[StateType](fixedState: StateType)(time: Time,
-                                                             key: String,
-                                                             value: Option[String],
-                                                             state: State[StateType]): Option[(String, String)] = {
-    log.debug(s"State before update: [key: $key, value: $value, $state]")
-    state.update(fixedState)
+  private def stateMapping(time: Time,
+                           key: String,
+                           value: Option[String],
+                           oldState: State[String]): Option[(String, String)] = {
+    val newState = value.toString
+    log.debug(s"State mapping: [key: $key, value: $value, $oldState -> $newState]")
+    oldState.update(newState)
     value.map(key -> _)
   }
 }
