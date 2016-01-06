@@ -1,5 +1,7 @@
 package com.buransky.understandingSparkStreamingState
 
+import scala.concurrent.Future
+
 /**
   * Application #2.
   *
@@ -9,6 +11,7 @@ package com.buransky.understandingSparkStreamingState
 object App2Recover extends BaseApp {
   override def main(args: Array[String]): Unit = {
     BaseApp.failOn = ""
+    BaseApp.lastMessage = "d"
     withKafkaAndSsc() { inputStream =>
       inputStream.mapWithState(BaseApp.stringStateSpec)
     }

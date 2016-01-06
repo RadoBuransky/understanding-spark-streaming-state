@@ -14,11 +14,12 @@ import org.apache.spark.SparkException
 object App3PublishFailAndRecover extends BaseApp {
   override def main(args: Array[String]): Unit = {
     withRunningKafka {
-      // Create topic otherwise creation will crash
-      publishStringMessageToKafka(kafkaTopic, "a")
-      publishStringMessageToKafka(kafkaTopic, "b")
-      publishStringMessageToKafka(kafkaTopic, "c")
-      publishStringMessageToKafka(kafkaTopic, "d")
+      for (i <- 0 to args.length) {
+        publishStringMessageToKafka(kafkaTopic, "a")
+        publishStringMessageToKafka(kafkaTopic, "b")
+        publishStringMessageToKafka(kafkaTopic, "c")
+        publishStringMessageToKafka(kafkaTopic, "d")
+      }
 
       // First step is to simulate a failure ...
       BaseApp.failOn = "c"
@@ -30,7 +31,7 @@ object App3PublishFailAndRecover extends BaseApp {
       }
       catch {
         case ex: SparkException if ex.getCause.getMessage == "Fail!" => // This is expected
-        case other =>
+        case other: Throwable =>
           log.error("WTF", other)
           throw other
       }
